@@ -19,6 +19,7 @@ Semua ada di satu file: `index.html` (tanpa build, tanpa server).
 | Getar & suara | Umpan balik getar + nada saat benar/salah | Atur → Getar & suara |
 | Riwayat jawaban | 8 jawaban terakhir di tab Koleksi, plus statistik "Beruntun terbaik" | Koleksi |
 | Peta dunia nyata | Pilih **Jalan (OpenStreetMap)**, **Satelit** (Esri World Imagery), atau **Topografi** (gaya lama). Tombol +/− (atau scroll mouse) untuk zoom | Atur → Jenis peta |
+| Karakter pemain | Pemain tampil sebagai karakter (bukan titik) yang berjalan & menghadap arah gerak, dengan label nama. Pilih rambut (pendek/panjang/hijab/topi), warna kulit, dan warna baju | Beranda |
 | Ekspor CSV | Unduh semua jawaban (nama, materi, benar/salah, waktu, soal, kunci) untuk guru | Atur → Unduh riwayat jawaban |
 
 Mode simulasi memakai lokasi GPS terakhir di perangkat; kalau belum pernah ada, game mencoba mengambil lokasi sekali, lalu jatuh ke Monas, Jakarta. Peta nyata butuh internet; kalau ubin peta gagal dimuat, grid 10 m tetap tampil.

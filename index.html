@@ -48,6 +48,17 @@ button{font:inherit;color:inherit;cursor:pointer}
 .steps{list-style:none;margin:0;padding:0;display:grid;gap:8px;counter-reset:s}
 .steps li{display:grid;grid-template-columns:28px 1fr;gap:10px;align-items:start;counter-increment:s}
 .steps li::before{content:counter(s);font-family:var(--display);font-size:15px;width:28px;height:28px;border-radius:50%;background:var(--ink);color:var(--paper);display:grid;place-items:center}
+.avatar{display:grid;grid-template-columns:96px 1fr;gap:14px;align-items:start;background:var(--paper);border-radius:16px;padding:12px;box-shadow:inset 0 0 0 1px var(--line)}
+.avatar canvas{width:96px;height:124px;background:var(--ground);border-radius:12px}
+.avOpts{display:grid;gap:8px;min-width:0}
+.avOpts .inp{max-width:none;width:100%;box-sizing:border-box;padding:8px 10px}
+.avRow{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.avRow b{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);width:100%}
+.sw{width:28px;height:28px;border-radius:50%;border:0;box-shadow:inset 0 0 0 2px rgba(0,0,0,.12);padding:0}
+.sw[aria-pressed="true"]{box-shadow:0 0 0 2px var(--paper),0 0 0 4px var(--ink)}
+.avRow .pill{border:0;border-radius:999px;padding:5px 10px;font-weight:700;font-size:13px;background:var(--ground);box-shadow:inset 0 0 0 1.5px var(--line)}
+.avRow .pill[aria-pressed="true"]{background:var(--ink);color:var(--paper);box-shadow:none}
+@media (max-width:340px){.avatar{grid-template-columns:1fr}.avatar canvas{justify-self:center}}
 .note{font-size:13px;color:var(--ink-soft);background:var(--paper);border-radius:12px;padding:12px 14px;margin:0;box-shadow:inset 0 0 0 1px var(--line)}
 
 /* Play */
@@ -156,6 +167,15 @@ sup,sub{line-height:0}
     <div class="homeBody gut">
       <h1 class="brand">Jelajah <span>Numon</span></h1>
       <p class="lede">Numon bersembunyi di sekitar sekolah. Jalan mendekatinya, lihat lewat kamera, lalu tangkap dengan menjawab soal matematika.</p>
+      <div class="avatar">
+        <canvas id="avC" aria-label="Pratinjau karaktermu"></canvas>
+        <div class="avOpts">
+          <input class="inp" id="iName2" autocomplete="off" placeholder="Nama kamu" maxlength="40" aria-label="Nama kamu">
+          <div class="avRow" id="avHair"><b>Rambut</b></div>
+          <div class="avRow" id="avSkin"><b>Kulit</b></div>
+          <div class="avRow" id="avShirt"><b>Baju</b></div>
+        </div>
+      </div>
       <div class="btns">
         <button class="btn primary" id="bGps">Mulai dengan GPS <small>Lokasi + kamera HP</small></button>
         <button class="btn ghost" id="bSim">Mode simulasi <small>Ketuk peta untuk berjalan</small></button>
@@ -395,15 +415,67 @@ function drawNumon(ctx,x,y,s,type,lvl,t,opt={}){
   ctx.restore();
 }
 
+/* ---------- Karakter pemain ---------- */
+const AV={
+  hair:[['pendek','Pendek'],['panjang','Panjang'],['hijab','Hijab'],['topi','Topi']],
+  skin:['#F5D0B0','#E0AC80','#B97A50','#7A4B2E'],
+  shirt:['#2B50E0','#E0573B','#2A8C68','#7A4FD6','#E09A12','#F2F2F2'],
+  hairCol:'#2B1D16',pants:'#24324A'
+};
+// Digambar prosedural. s = tinggi karakter dalam px; (x,y) = titik kaki. face: -1 kiri, 1 kanan. walk: fase langkah (null = diam).
+function drawPlayer(ctx,x,y,s,av,t,walk,face=1){
+  const skin=AV.skin[av.skin]||AV.skin[1],shirt=AV.shirt[av.shirt]||AV.shirt[0],dk=shade(shirt,-.3),u=s/100;
+  const sw=walk==null?0:Math.sin(walk),bob=walk==null?(RM?0:Math.sin(t*2.2)*u*1.2):Math.abs(Math.cos(walk))*u*-3;
+  ctx.save();ctx.translate(x,y);
+  ctx.fillStyle='rgba(19,35,58,.25)';ctx.beginPath();ctx.ellipse(0,0,u*20,u*5,0,0,Math.PI*2);ctx.fill();
+  ctx.translate(0,bob);ctx.lineCap='round';ctx.lineJoin='round';
+  // kaki
+  ctx.strokeStyle=AV.pants;ctx.lineWidth=u*10;
+  for(const k of[-1,1]){ctx.beginPath();ctx.moveTo(k*u*6,-u*34);ctx.lineTo(k*u*6+sw*k*u*7,-u*6);ctx.stroke();
+    ctx.fillStyle='#1b1b1b';ctx.beginPath();ctx.ellipse(k*u*6+sw*k*u*7+face*u*2,-u*3,u*7,u*4,0,0,Math.PI*2);ctx.fill()}
+  // tas punggung (di sisi belakang)
+  ctx.fillStyle=shade(shirt,-.45);roundPoly(ctx,[[-face*u*24,-u*64],[-face*u*10,-u*64],[-face*u*10,-u*38],[-face*u*24,-u*38]],u*5);ctx.fill();
+  // badan
+  ctx.fillStyle=shirt;roundPoly(ctx,[[-u*15,-u*68],[u*15,-u*68],[u*16,-u*32],[-u*16,-u*32]],u*8);ctx.fill();
+  ctx.strokeStyle=dk;ctx.lineWidth=u*2.5;ctx.stroke();
+  // lengan
+  ctx.lineWidth=u*8;
+  for(const k of[-1,1]){const a=-sw*k*u*8;ctx.strokeStyle=shirt;ctx.beginPath();ctx.moveTo(k*u*15,-u*62);ctx.lineTo(k*u*19+a*.3,-u*48);ctx.stroke();
+    ctx.strokeStyle=skin;ctx.beginPath();ctx.moveTo(k*u*19+a*.3,-u*48);ctx.lineTo(k*u*19+a,-u*38);ctx.stroke()}
+  // kepala
+  const hy=-u*84,hr=u*19,ex=face*u*4;
+  if(av.hair==='hijab'){ctx.fillStyle=shade(shirt,.55);ctx.beginPath();ctx.arc(0,hy,hr*1.18,Math.PI*.9,Math.PI*2.1);ctx.lineTo(u*20,-u*60);ctx.lineTo(-u*20,-u*60);ctx.closePath();ctx.fill();ctx.strokeStyle=shade(shirt,.15);ctx.lineWidth=u*2;ctx.stroke()}
+  if(av.hair==='panjang'){ctx.fillStyle=AV.hairCol;roundPoly(ctx,[[-hr*1.08,hy-hr*.3],[hr*1.08,hy-hr*.3],[hr*1.05,hy+hr*1.25],[-hr*1.05,hy+hr*1.25]],u*7);ctx.fill()}
+  ctx.fillStyle=skin;ctx.beginPath();
+  if(av.hair==='hijab')ctx.ellipse(ex*.5,hy+u*2,hr*.78,hr*.88,0,0,Math.PI*2);else ctx.arc(0,hy,hr,0,Math.PI*2);ctx.fill();
+  if(av.hair==='pendek'||av.hair==='panjang'){ctx.fillStyle=AV.hairCol;ctx.beginPath();ctx.arc(0,hy,hr*1.04,Math.PI*1.02,Math.PI*1.98);ctx.quadraticCurveTo(face*hr*.2,hy-hr*.25,-hr*1.02,hy-hr*.12);ctx.fill()}
+  if(av.hair==='topi'){ctx.fillStyle=AV.hairCol;ctx.beginPath();ctx.arc(0,hy,hr*1.02,Math.PI*1.05,Math.PI*1.95);ctx.fill();
+    ctx.fillStyle=shirt;ctx.beginPath();ctx.arc(0,hy-hr*.2,hr*1.02,Math.PI,Math.PI*2);ctx.closePath();ctx.fill();
+    ctx.fillStyle=dk;roundPoly(ctx,[[face>0?0:-hr*1.6,hy-hr*.28],[face>0?hr*1.6:0,hy-hr*.28],[face>0?hr*1.6:0,hy-hr*.12],[face>0?0:-hr*1.6,hy-hr*.12]],u*3);ctx.fill()}
+  // wajah
+  const blink=!RM&&(t*.5%3.5)<.12;ctx.fillStyle=COL.ink;
+  for(const k of[-1,1]){const px=ex+k*u*6.5,py=hy+u*2;if(blink){ctx.fillRect(px-u*2.5,py,u*5,u*1.4)}else{ctx.beginPath();ctx.arc(px,py,u*2.6,0,Math.PI*2);ctx.fill()}}
+  ctx.strokeStyle=COL.ink;ctx.lineWidth=u*1.8;ctx.beginPath();ctx.arc(ex,hy+u*7,u*4,.15*Math.PI,.85*Math.PI);ctx.stroke();
+  ctx.fillStyle='rgba(224,87,59,.28)';for(const k of[-1,1]){ctx.beginPath();ctx.arc(ex+k*u*11,hy+u*7,u*3,0,Math.PI*2);ctx.fill()}
+  ctx.restore();
+}
+// Kecepatan dihitung dari jendela ~1,5 dtk, supaya lompatan GPS tidak membuat animasi tersentak.
+const PL={walk:0,face:1,moving:false,hist:[]};
+function trackPlayer(dt,now){
+  const h=PL.hist;h.push([now,S.pos.x,S.pos.y]);while(h.length>2&&now-h[0][0]>1.5)h.shift();
+  const a=h[0],span=now-a[0],dx=S.pos.x-a[1],v=span>.3?Math.hypot(dx,S.pos.y-a[2])/span:0;
+  PL.moving=v>.4&&v<8;if(Math.abs(dx)>.3)PL.face=dx>0?1:-1;if(PL.moving)PL.walk+=dt*Math.min(12,5+v);
+}
+
 /* ---------- State ---------- */
 const S={mode:null,origin:null,pos:{x:0,y:0},center:{x:0,y:0},acc:null,heading:null,beta:null,lastOri:0,
   spawns:[],walk:null,target:null,ar:null,score:0,dex:{},stats:{alj:[0,0],geo:[0,0],bil:[0,0],sta:[0,0]},
-  streak:0,best:0,hintsLeft:0,log:[],name:'',
+  streak:0,best:0,hintsLeft:0,log:[],name:'',av:{hair:'pendek',skin:1,shirt:0},
   settings:{basemap:'osm',radius:60,count:6,catchR:15,timer:0,hints:3,fx:1,topics:{alj:true,geo:true,bil:true,sta:true}}};
 let uid=0,screen='home',view='vMap';
 const KEY='numon.v1',LOG_MAX=500;
-try{const d=JSON.parse(localStorage.getItem(KEY)||'null');if(d){S.score=d.score||0;S.dex=d.dex||{};S.best=d.best||0;S.log=Array.isArray(d.log)?d.log:[];S.name=d.name||'';S.lastOrigin=d.lastOrigin||null;Object.assign(S.stats,d.stats||{});Object.assign(S.settings,d.settings||{});S.settings.topics={...{alj:true,geo:true,bil:true,sta:true},...(d.settings?.topics||{})}}}catch(e){}
-function save(){try{localStorage.setItem(KEY,JSON.stringify({score:S.score,dex:S.dex,stats:S.stats,settings:S.settings,best:S.best,log:S.log,name:S.name,lastOrigin:S.lastOrigin}))}catch(e){}}
+try{const d=JSON.parse(localStorage.getItem(KEY)||'null');if(d){S.score=d.score||0;S.dex=d.dex||{};S.best=d.best||0;S.log=Array.isArray(d.log)?d.log:[];S.name=d.name||'';S.lastOrigin=d.lastOrigin||null;Object.assign(S.av,d.av||{});Object.assign(S.stats,d.stats||{});Object.assign(S.settings,d.settings||{});S.settings.topics={...{alj:true,geo:true,bil:true,sta:true},...(d.settings?.topics||{})}}}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify({score:S.score,dex:S.dex,stats:S.stats,settings:S.settings,best:S.best,log:S.log,name:S.name,lastOrigin:S.lastOrigin,av:S.av}))}catch(e){}}
 
 /* ---------- Getar & suara ---------- */
 let actx=null;
@@ -536,7 +608,9 @@ function renderMap(t){
   }
   // pemain
   if(S.heading!=null&&performance.now()-S.lastOri<2000){const a=(S.heading-90)*Math.PI/180;ctx.fillStyle=COL.accent;ctx.globalAlpha=.3;ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,34,a-.45,a+.45);ctx.closePath();ctx.fill();ctx.globalAlpha=1}
-  ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(cx,cy,11,0,Math.PI*2);ctx.fill();ctx.fillStyle=COL.accent;ctx.beginPath();ctx.arc(cx,cy,7.5,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#fff';ctx.beginPath();ctx.ellipse(cx,cy,16,6,0,0,Math.PI*2);ctx.fill();ctx.fillStyle=COL.accent;ctx.beginPath();ctx.ellipse(cx,cy,12,4,0,0,Math.PI*2);ctx.fill();
+  drawPlayer(ctx,cx,cy,56,S.av,t,PL.moving?PL.walk:null,PL.face);
+  if(S.name){ctx.font=`700 11px ${V('--body')}`;ctx.textAlign='center';const tw=ctx.measureText(S.name).width+12;ctx.fillStyle=COL.ink;roundPoly(ctx,[[cx-tw/2,cy-82],[cx+tw/2,cy-82],[cx+tw/2,cy-66],[cx-tw/2,cy-66]],6);ctx.fill();ctx.fillStyle=COL.paper;ctx.fillText(S.name,cx,cy-73.5)}
   // skala & utara
   const M=[5,10,20,50,100].find(v=>v*sc>=40)||100,L=M*sc;
   if(real){ctx.fillStyle='rgba(251,252,250,.85)';ctx.fillRect(8,H-96,L+16,34)}
@@ -724,13 +798,24 @@ function setView(v){view=v;document.querySelectorAll('.view').forEach(el=>el.hid
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>setView(t.dataset.view));
 
 /* ---------- Beranda ---------- */
-const heroC=$('#heroC');
+const heroC=$('#heroC'),avC=$('#avC');
+function renderAvatarOpts(){
+  $('#iName2').value=S.name;
+  const mk=(box,items,key,sw)=>{box.querySelectorAll('button').forEach(b=>b.remove());items.forEach((it,i)=>{const b=document.createElement('button');const v=sw?i:it[0];
+    if(sw){b.className='sw';b.style.background=it;b.setAttribute('aria-label',`${key==='skin'?'Warna kulit':'Warna baju'} ${i+1}`)}else{b.className='pill';b.textContent=it[1]}
+    b.setAttribute('aria-pressed',S.av[key]===v);b.onclick=()=>{S.av[key]=v;save();renderAvatarOpts()};box.appendChild(b)})};
+  mk($('#avHair'),AV.hair,'hair',false);mk($('#avSkin'),AV.skin,'skin',true);mk($('#avShirt'),AV.shirt,'shirt',true);
+}
+$('#iName2').oninput=e=>{S.name=e.target.value.trim();save()};
+renderAvatarOpts();
 function renderHero(t){
   const [ctx,W,H]=sizeCanvas(heroC);ctx.fillStyle=COL.ground;ctx.fillRect(0,0,W,H);
   ctx.strokeStyle=COL.line;ctx.lineWidth=1.2;
   for(let k=1;k<9;k++){ctx.beginPath();for(let a=0;a<=Math.PI*2+.01;a+=.07){const rr=k*26*(1+.08*Math.sin(3*a+k)+.05*Math.sin(5*a-k*.7));const x=W*.5+Math.cos(a)*rr*1.6,y=H*.62+Math.sin(a)*rr*.75;a?ctx.lineTo(x,y):ctx.moveTo(x,y)}ctx.stroke()}
   const n=4,gap=Math.min(110,W/(n+.4)),s=Math.min(78,gap*.78);
-  KEYS.forEach((k,i)=>drawNumon(ctx,W/2+(i-(n-1)/2)*gap,H*.58+(i%2?10:-6),s,k,i===2?3:i===1?2:1,t+i));
+  KEYS.forEach((k,i)=>drawNumon(ctx,W/2+(i-(n-1)/2)*gap*1.12+(i<2?-gap*.32:gap*.32),H*.58+(i%2?10:-6),s*.9,k,i===2?3:i===1?2:1,t+i));
+  drawPlayer(ctx,W/2,H*.9,Math.min(120,H*.62),S.av,t,null,1);
+  if(avC.isConnected&&screen==='home'){const [c2,w2,h2]=sizeCanvas(avC);c2.clearRect(0,0,w2,h2);drawPlayer(c2,w2/2,h2-10,h2*.72,S.av,t,null,1)}
 }
 $('#bGps').onclick=startGPS;
 $('#bSim').onclick=()=>{askOrientation();enterPlay('sim');if(!S.lastOrigin)simLocate()};
@@ -740,6 +825,7 @@ let prev=performance.now(),hudT=0;
 function loop(now){
   const dt=Math.min(.1,(now-prev)/1000);prev=now;const t=now/1000;
   if(S.mode==='sim'&&S.walk){const dx=S.walk.x-S.pos.x,dy=S.walk.y-S.pos.y,d=Math.hypot(dx,dy),st=6*dt;if(d<=st){S.pos.x=S.walk.x;S.pos.y=S.walk.y;S.walk=null}else{S.pos.x+=dx/d*st;S.pos.y+=dy/d*st}}
+  if(S.mode)trackPlayer(dt,t);
   if(screen==='home')renderHero(t);
   else if(screen==='play'){if(view==='vMap')renderMap(t);if((hudT+=dt)>.25){hudT=0;updateHud()}}
   else if(screen==='ar'){renderAR(t);tickQuiz()}
