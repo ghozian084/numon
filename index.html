@@ -62,6 +62,9 @@ button{font:inherit;color:inherit;cursor:pointer}
 #mapC{width:100%;height:100%;display:block;touch-action:none}
 .maptools{position:absolute;left:0;right:0;bottom:12px;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}
 .maptools>*{pointer-events:auto}
+.zoom{position:absolute;right:max(12px,env(safe-area-inset-right,0px));top:62px;display:flex;flex-direction:column;border-radius:12px;overflow:hidden;box-shadow:0 2px 10px rgba(19,35,58,.25)}
+.zoom button{border:0;background:var(--paper);width:40px;height:40px;font-size:22px;font-weight:800;line-height:1}
+.zoom button+button{border-top:1px solid var(--line)}
 .hint{font-size:13px;font-weight:700;background:var(--ink);color:var(--paper);padding:7px 12px;border-radius:999px}
 .warn{display:flex;gap:10px;align-items:center;background:var(--paper);border-radius:14px;padding:8px 8px 8px 14px;box-shadow:0 4px 16px rgba(19,35,58,.18);font-size:13px;font-weight:700}
 .tabs{display:grid;grid-template-columns:repeat(3,1fr);background:var(--paper);border-top:1px solid var(--line);flex:none}
@@ -176,6 +179,7 @@ sup,sub{line-height:0}
     <main class="views">
       <div class="view" id="vMap">
         <canvas id="mapC" aria-label="Peta lokasi Numon di sekitarmu"></canvas>
+        <div class="zoom"><button id="bZin" aria-label="Perbesar peta">+</button><button id="bZout" aria-label="Perkecil peta">−</button></div>
         <div class="maptools gut">
           <div class="warn" id="outWarn" hidden>Kamu di luar area permainan<button class="btn primary slim" id="bRecenter2">Pindah ke sini</button></div>
           <div class="hint" id="mapHint">Ketuk peta untuk berjalan</div>
@@ -198,6 +202,7 @@ sup,sub{line-height:0}
       <div class="view scroll gut" id="vSet" hidden>
         <div class="wrap">
           <h2>Pengaturan guru</h2>
+          <div class="field"><label>Jenis peta</label><div class="seg" data-k="basemap" data-v="osm,sat,topo" data-u="" data-l="Jalan (OSM),Satelit,Topografi"></div></div>
           <div class="field"><label>Radius area permainan</label><div class="seg" data-k="radius" data-v="40,60,100,150" data-u=" m"></div></div>
           <div class="field"><label>Jumlah Numon di peta</label><div class="seg" data-k="count" data-v="4,6,10,15" data-u=""></div></div>
           <div class="field"><label>Jarak tangkap</label><div class="seg" data-k="catchR" data-v="10,15,25" data-u=" m"></div></div>
@@ -394,11 +399,11 @@ function drawNumon(ctx,x,y,s,type,lvl,t,opt={}){
 const S={mode:null,origin:null,pos:{x:0,y:0},center:{x:0,y:0},acc:null,heading:null,beta:null,lastOri:0,
   spawns:[],walk:null,target:null,ar:null,score:0,dex:{},stats:{alj:[0,0],geo:[0,0],bil:[0,0],sta:[0,0]},
   streak:0,best:0,hintsLeft:0,log:[],name:'',
-  settings:{radius:60,count:6,catchR:15,timer:0,hints:3,fx:1,topics:{alj:true,geo:true,bil:true,sta:true}}};
+  settings:{basemap:'osm',radius:60,count:6,catchR:15,timer:0,hints:3,fx:1,topics:{alj:true,geo:true,bil:true,sta:true}}};
 let uid=0,screen='home',view='vMap';
 const KEY='numon.v1',LOG_MAX=500;
-try{const d=JSON.parse(localStorage.getItem(KEY)||'null');if(d){S.score=d.score||0;S.dex=d.dex||{};S.best=d.best||0;S.log=Array.isArray(d.log)?d.log:[];S.name=d.name||'';Object.assign(S.stats,d.stats||{});Object.assign(S.settings,d.settings||{});S.settings.topics={...{alj:true,geo:true,bil:true,sta:true},...(d.settings?.topics||{})}}}catch(e){}
-function save(){try{localStorage.setItem(KEY,JSON.stringify({score:S.score,dex:S.dex,stats:S.stats,settings:S.settings,best:S.best,log:S.log,name:S.name}))}catch(e){}}
+try{const d=JSON.parse(localStorage.getItem(KEY)||'null');if(d){S.score=d.score||0;S.dex=d.dex||{};S.best=d.best||0;S.log=Array.isArray(d.log)?d.log:[];S.name=d.name||'';S.lastOrigin=d.lastOrigin||null;Object.assign(S.stats,d.stats||{});Object.assign(S.settings,d.settings||{});S.settings.topics={...{alj:true,geo:true,bil:true,sta:true},...(d.settings?.topics||{})}}}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify({score:S.score,dex:S.dex,stats:S.stats,settings:S.settings,best:S.best,log:S.log,name:S.name,lastOrigin:S.lastOrigin}))}catch(e){}}
 
 /* ---------- Getar & suara ---------- */
 let actx=null;
@@ -429,7 +434,7 @@ function startGPS(){
   try{
     S.geoId=navigator.geolocation.watchPosition(p=>{
       const c=p.coords;
-      if(!got){got=true;clearTimeout(to);S.origin={lat:c.latitude,lon:c.longitude};S.pos={x:0,y:0};enterPlay('gps')}
+      if(!got){got=true;clearTimeout(to);S.origin={lat:c.latitude,lon:c.longitude};S.lastOrigin={...S.origin};save();S.pos={x:0,y:0};enterPlay('gps')}
       S.pos=toXY(c.latitude,c.longitude);S.acc=c.accuracy;
     },e=>{if(!got){got=true;clearTimeout(to);stopGeo();fallback(e.code===1?'Izin lokasi ditolak.':'GPS tidak tersedia di sini.')}},
     {enableHighAccuracy:true,maximumAge:2000,timeout:15000});
@@ -438,9 +443,15 @@ function startGPS(){
 function stopGeo(){if(S.geoId!=null){try{navigator.geolocation.clearWatch(S.geoId)}catch(e){}S.geoId=null}}
 function fallback(msg){toast(msg+' Beralih ke mode simulasi.',3600);enterPlay('sim')}
 
+const DEFAULT_ORIGIN={lat:-6.1754,lon:106.8272}; // Monas, Jakarta: dipakai simulasi bila lokasi belum pernah didapat
+// Simulasi di lokasi nyata: ambil posisi sekali (tanpa melacak). Posisi relatif tetap, jadi peta tinggal bergeser.
+function simLocate(){
+  if(!('geolocation' in navigator))return;
+  try{navigator.geolocation.getCurrentPosition(p=>{if(S.mode!=='sim')return;const o={lat:p.coords.latitude,lon:p.coords.longitude};S.origin=o;S.lastOrigin={...o};save();toast('Peta simulasi dipindah ke lokasimu.')},()=>{},{enableHighAccuracy:false,timeout:8000,maximumAge:600000})}catch(e){}
+}
 function enterPlay(mode){
   S.mode=mode;$('#homeStatus').textContent='';S.hintsLeft=S.settings.hints;S.streak=0;
-  if(mode==='sim'){S.pos={x:0,y:0}}
+  if(mode==='sim'){S.pos={x:0,y:0};S.origin=S.lastOrigin?{...S.lastOrigin}:{...DEFAULT_ORIGIN}}
   S.center={...S.pos};respawnAll();
   $('#hMode').textContent=mode==='gps'?'GPS':'Simulasi';$('#hMode').classList.toggle('live',mode==='gps');
   $('#mapHint').textContent=mode==='gps'?'Berjalanlah mendekati Numon':'Ketuk peta untuk berjalan';
@@ -459,21 +470,52 @@ function respawnAll(){S.spawns=[];for(let i=0;i<S.settings.count;i++){const s=ne
 setInterval(()=>{if(S.mode&&screen!=='ar'&&S.spawns.length<S.settings.count){const s=newSpawn();if(s)S.spawns.push(s)}},12000);
 
 /* ---------- Peta ---------- */
-const mapC=$('#mapC');let mapGeom=null;
+const mapC=$('#mapC');let mapGeom=null,zoom=1;
+const BASEMAPS={
+  osm:{max:19,attr:'© OpenStreetMap contributors',url:(z,x,y)=>`https://tile.openstreetmap.org/${z}/${x}/${y}.png`},
+  sat:{max:19,attr:'Citra © Esri, Maxar, Earthstar Geographics',url:(z,x,y)=>`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`}
+};
+const tileCache=new Map();
+function getTile(bm,z,x,y){
+  const k=`${bm}/${z}/${x}/${y}`;let im=tileCache.get(k);
+  if(!im){im=new Image();im.decoding='async';im.referrerPolicy='strict-origin-when-cross-origin';im.src=BASEMAPS[bm].url(z,x,y);tileCache.set(k,im);
+    if(tileCache.size>400){const first=tileCache.keys().next().value;tileCache.delete(first)}}
+  else{tileCache.delete(k);tileCache.set(k,im)}
+  return im.complete&&im.naturalWidth?im:null;
+}
+// Gambar ubin Web Mercator di bawah peta. Jarak permainan memakai meter lokal; untuk area ~100 m selisihnya dengan Mercator tak terasa.
+function drawTiles(ctx,W,H,sc){
+  const B=BASEMAPS[S.settings.basemap];if(!B||!S.origin)return false;
+  const lat=S.origin.lat+S.pos.y/110540,lon=S.origin.lon+S.pos.x/(111320*Math.cos(S.origin.lat*Math.PI/180));
+  const cosL=Math.cos(lat*Math.PI/180),z=Math.max(2,Math.min(B.max,Math.round(Math.log2(156543.034*cosL*sc))));
+  const n=2**z,f=sc*156543.034*cosL/n; // piksel layar per piksel ubin
+  const wx=(lon+180)/360*256*n,lr=lat*Math.PI/180,wy=(1-Math.log(Math.tan(lr)+1/Math.cos(lr))/Math.PI)/2*256*n;
+  const ts=256*f,tx0=Math.floor((wx-W/2/f)/256),tx1=Math.floor((wx+W/2/f)/256),ty0=Math.floor((wy-H/2/f)/256),ty1=Math.floor((wy+H/2/f)/256);
+  for(let ty=ty0;ty<=ty1;ty++)for(let tx=tx0;tx<=tx1;tx++){
+    if(ty<0||ty>=n)continue;const im=getTile(S.settings.basemap,z,((tx%n)+n)%n,ty);if(!im)continue;
+    const px=Math.floor(W/2+(tx*256-wx)*f),py=Math.floor(H/2+(ty*256-wy)*f);ctx.drawImage(im,px,py,Math.ceil(ts)+1,Math.ceil(ts)+1);
+  }
+  return true;
+}
+function setZoom(m){zoom=Math.max(.5,Math.min(4,zoom*m))}
+$('#bZin').onclick=()=>setZoom(1.5);$('#bZout').onclick=()=>setZoom(1/1.5);
+mapC.addEventListener('wheel',e=>{e.preventDefault();setZoom(e.deltaY<0?1.2:1/1.2)},{passive:false});
 function renderMap(t){
-  const [ctx,W,H]=sizeCanvas(mapC),R=S.settings.radius,sc=(Math.min(W,H)/2-30)/(R*1.12),cx=W/2,cy=H/2;
+  const [ctx,W,H]=sizeCanvas(mapC),R=S.settings.radius,sc=(Math.min(W,H)/2-30)/(R*1.12)*zoom,cx=W/2,cy=H/2;
   const sx=x=>cx+(x-S.pos.x)*sc,sy=y=>cy-(y-S.pos.y)*sc;mapGeom={sx,sy,sc,W,H};
   ctx.fillStyle=COL.ground;ctx.fillRect(0,0,W,H);
-  // grid 10 m
+  const real=S.settings.basemap!=='topo';
+  // grid 10 m (di mode peta nyata hanya terlihat selama ubin belum termuat / offline)
   ctx.strokeStyle=COL.ground2;ctx.lineWidth=1;ctx.beginPath();
   const x0=Math.floor((S.pos.x-cx/sc)/10)*10,x1=S.pos.x+cx/sc,y0=Math.floor((S.pos.y-cy/sc)/10)*10,y1=S.pos.y+cy/sc;
   for(let x=x0;x<=x1;x+=10){const p=Math.round(sx(x))+.5;ctx.moveTo(p,0);ctx.lineTo(p,H)}
   for(let y=y0;y<=y1;y+=10){const p=Math.round(sy(y))+.5;ctx.moveTo(0,p);ctx.lineTo(W,p)}ctx.stroke();
+  if(real){drawTiles(ctx,W,H,sc);if(S.settings.basemap==='sat'){ctx.fillStyle='rgba(255,255,255,.12)';ctx.fillRect(0,0,W,H)}}
   // garis kontur
   ctx.strokeStyle=COL.line;ctx.lineWidth=1.2;
-  for(let k=1;k<=6;k++){ctx.beginPath();for(let a=0;a<=Math.PI*2+.01;a+=.08){const rr=(k/4.2)*R*(1+.07*Math.sin(3*a+k*1.7)+.045*Math.sin(5*a-k));const px=sx(S.center.x+Math.cos(a)*rr),py=sy(S.center.y+Math.sin(a)*rr);a?ctx.lineTo(px,py):ctx.moveTo(px,py)}ctx.stroke()}
+  if(!real)for(let k=1;k<=6;k++){ctx.beginPath();for(let a=0;a<=Math.PI*2+.01;a+=.08){const rr=(k/4.2)*R*(1+.07*Math.sin(3*a+k*1.7)+.045*Math.sin(5*a-k));const px=sx(S.center.x+Math.cos(a)*rr),py=sy(S.center.y+Math.sin(a)*rr);a?ctx.lineTo(px,py):ctx.moveTo(px,py)}ctx.stroke()}
   // batas area
-  ctx.save();ctx.setLineDash([7,7]);ctx.strokeStyle=COL.ink;ctx.globalAlpha=.45;ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx(S.center.x),sy(S.center.y),R*sc,0,Math.PI*2);ctx.stroke();ctx.restore();
+  ctx.save();ctx.setLineDash([7,7]);ctx.strokeStyle=real&&S.settings.basemap==='sat'?'#fff':COL.ink;ctx.globalAlpha=real?.85:.45;ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx(S.center.x),sy(S.center.y),R*sc,0,Math.PI*2);ctx.stroke();ctx.restore();
   // tujuan jalan (simulasi)
   if(S.walk){ctx.strokeStyle=COL.accent;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(sx(S.walk.x),sy(S.walk.y));ctx.setLineDash([3,5]);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=COL.accent;ctx.beginPath();ctx.arc(sx(S.walk.x),sy(S.walk.y),4,0,Math.PI*2);ctx.fill()}
   // lingkaran tangkap
@@ -496,10 +538,13 @@ function renderMap(t){
   if(S.heading!=null&&performance.now()-S.lastOri<2000){const a=(S.heading-90)*Math.PI/180;ctx.fillStyle=COL.accent;ctx.globalAlpha=.3;ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,34,a-.45,a+.45);ctx.closePath();ctx.fill();ctx.globalAlpha=1}
   ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(cx,cy,11,0,Math.PI*2);ctx.fill();ctx.fillStyle=COL.accent;ctx.beginPath();ctx.arc(cx,cy,7.5,0,Math.PI*2);ctx.fill();
   // skala & utara
-  const L=10*sc;ctx.strokeStyle=COL.ink;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(16,H-74);ctx.lineTo(16,H-68);ctx.lineTo(16+L,H-68);ctx.lineTo(16+L,H-74);ctx.stroke();
-  ctx.fillStyle=COL.ink;ctx.textAlign='left';ctx.fillText('10 m',16,H-84);
+  const M=[5,10,20,50,100].find(v=>v*sc>=40)||100,L=M*sc;
+  if(real){ctx.fillStyle='rgba(251,252,250,.85)';ctx.fillRect(8,H-96,L+16,34)}
+  ctx.strokeStyle=COL.ink;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(16,H-74);ctx.lineTo(16,H-68);ctx.lineTo(16+L,H-68);ctx.lineTo(16+L,H-74);ctx.stroke();
+  ctx.fillStyle=COL.ink;ctx.textAlign='left';ctx.fillText(M+' m',16,H-84);
   ctx.textAlign='center';ctx.fillStyle=COL.paper;ctx.beginPath();ctx.arc(W-30,30,15,0,Math.PI*2);ctx.fill();ctx.fillStyle=COL.ink;ctx.font=`16px ${V('--display')}`;ctx.fillText('U',W-30,31);
   ctx.beginPath();ctx.moveTo(W-30,9);ctx.lineTo(W-35,16);ctx.lineTo(W-25,16);ctx.closePath();ctx.fill();
+  if(real){const a=BASEMAPS[S.settings.basemap].attr;ctx.font=`600 10px ${V('--body')}`;ctx.textAlign='left';const w=ctx.measureText(a).width+10;ctx.fillStyle='rgba(251,252,250,.85)';ctx.fillRect(0,0,w,16);ctx.fillStyle=COL.ink;ctx.fillText(a,5,8.5)}
 }
 let downAt=null;
 mapC.addEventListener('pointerdown',e=>{downAt=[e.clientX,e.clientY]});
@@ -653,7 +698,7 @@ function renderDex(){
 /* ---------- Pengaturan ---------- */
 function renderSettings(){
   $('#iName').value=S.name;
-  document.querySelectorAll('.seg[data-k]').forEach(seg=>{const k=seg.dataset.k,u=seg.dataset.u,labels=seg.dataset.l?.split(',');seg.innerHTML='';for(const [i,v] of seg.dataset.v.split(',').map(Number).entries()){const b=document.createElement('button');b.textContent=labels?labels[i]:v+u;b.setAttribute('aria-pressed',S.settings[k]===v);b.onclick=()=>{S.settings[k]=v;if(k==='hints')S.hintsLeft=v;save();renderSettings()};seg.appendChild(b)}});
+  document.querySelectorAll('.seg[data-k]').forEach(seg=>{const k=seg.dataset.k,u=seg.dataset.u,labels=seg.dataset.l?.split(',');seg.innerHTML='';for(const [i,v] of seg.dataset.v.split(',').map(v=>isNaN(v)?v:Number(v)).entries()){const b=document.createElement('button');b.textContent=labels?labels[i]:v+u;b.setAttribute('aria-pressed',S.settings[k]===v);b.onclick=()=>{S.settings[k]=v;if(k==='hints')S.hintsLeft=v;save();renderSettings()};seg.appendChild(b)}});
   const ts=$('#topicSeg');ts.innerHTML='';
   for(const k of KEYS){const b=document.createElement('button');b.textContent=TYPES[k].topic;b.setAttribute('aria-pressed',!!S.settings.topics[k]);b.onclick=()=>{const on=KEYS.filter(x=>S.settings.topics[x]);if(S.settings.topics[k]&&on.length===1){toast('Minimal satu materi harus aktif.');return}S.settings.topics[k]=!S.settings.topics[k];save();renderSettings()};ts.appendChild(b)}
 }
@@ -688,7 +733,7 @@ function renderHero(t){
   KEYS.forEach((k,i)=>drawNumon(ctx,W/2+(i-(n-1)/2)*gap,H*.58+(i%2?10:-6),s,k,i===2?3:i===1?2:1,t+i));
 }
 $('#bGps').onclick=startGPS;
-$('#bSim').onclick=()=>{askOrientation();enterPlay('sim')};
+$('#bSim').onclick=()=>{askOrientation();enterPlay('sim');if(!S.lastOrigin)simLocate()};
 
 /* ---------- Loop ---------- */
 let prev=performance.now(),hudT=0;
