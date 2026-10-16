@@ -18,7 +18,10 @@ Semua ada di satu file: `index.html` (tanpa build, tanpa server).
 | Petunjuk 50:50 | Menghapus 2 pilihan salah; poin tangkapan itu jadi setengah | Atur → Petunjuk per sesi (0/3/5) |
 | Getar & suara | Umpan balik getar + nada saat benar/salah | Atur → Getar & suara |
 | Riwayat jawaban | 8 jawaban terakhir di tab Koleksi, plus statistik "Beruntun terbaik" | Koleksi |
+| Peta dunia nyata | Pilih **Jalan (OpenStreetMap)**, **Satelit** (Esri World Imagery), atau **Topografi** (gaya lama). Tombol +/− (atau scroll mouse) untuk zoom | Atur → Jenis peta |
 | Ekspor CSV | Unduh semua jawaban (nama, materi, benar/salah, waktu, soal, kunci) untuk guru | Atur → Unduh riwayat jawaban |
+
+Mode simulasi memakai lokasi GPS terakhir di perangkat; kalau belum pernah ada, game mencoba mengambil lokasi sekali, lalu jatuh ke Monas, Jakarta. Peta nyata butuh internet; kalau ubin peta gagal dimuat, grid 10 m tetap tampil.
 
 Catatan: keluar dari layar AR saat soal sudah muncul dihitung sebagai jawaban salah, supaya siswa tidak bisa "ganti soal" dengan keluar-masuk.
 
