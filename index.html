@@ -59,6 +59,9 @@ button{font:inherit;color:inherit;cursor:pointer}
 .avRow .pill{border:0;border-radius:999px;padding:5px 10px;font-weight:700;font-size:13px;background:var(--ground);box-shadow:inset 0 0 0 1.5px var(--line)}
 .avRow .pill[aria-pressed="true"]{background:var(--ink);color:var(--paper);box-shadow:none}
 @media (max-width:340px){.avatar{grid-template-columns:1fr}.avatar canvas{justify-self:center}}
+.note.gpsHelp{display:grid;gap:8px;box-shadow:inset 0 0 0 2px var(--bad);color:var(--ink)}
+.gpsHelp b{font-size:15px}
+.gpsHelp ol{margin:0;padding-left:20px;display:grid;gap:4px}
 .note{font-size:13px;color:var(--ink-soft);background:var(--paper);border-radius:12px;padding:12px 14px;margin:0;box-shadow:inset 0 0 0 1px var(--line)}
 
 /* Play */
@@ -186,7 +189,12 @@ sup,sub{line-height:0}
         <li>Ketuk Numon, arahkan kamera, ketuk lagi untuk memunculkan soal.</li>
         <li>Jawaban benar menangkapnya. Jawaban salah membuatnya kabur, lengkap dengan pembahasan.</li>
       </ol>
-      <p class="note">GPS dan kamera hanya jalan bila halaman dibuka lewat HTTPS di HP. Kalau izin ditolak atau tidak tersedia, permainan otomatis pindah ke mode simulasi.</p>
+      <div class="note gpsHelp" id="gpsHelp" hidden>
+        <b id="gpsHelpTitle">Izin lokasi diblokir</b>
+        <ol id="gpsHelpSteps"></ol>
+        <div class="row"><button class="btn primary slim" id="bGpsRetry">Coba GPS lagi</button><button class="btn ghost slim" id="bGpsSim">Main simulasi dulu</button></div>
+      </div>
+      <p class="note">GPS dan kamera hanya jalan bila halaman dibuka lewat HTTPS di HP. Kalau GPS gagal, kamu bisa tetap main di mode simulasi.</p>
     </div>
   </section>
 
@@ -497,18 +505,37 @@ const toXY=(lat,lon)=>({x:(lon-S.origin.lon)*Math.cos(S.origin.lat*Math.PI/180)*
 addEventListener('deviceorientation',e=>{let h=null;if(typeof e.webkitCompassHeading==='number')h=e.webkitCompassHeading;else if(e.alpha!=null)h=(360-e.alpha)%360;if(h!=null){S.heading=h;S.beta=e.beta;S.lastOri=performance.now()}});
 async function askOrientation(){try{if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function')await DeviceOrientationEvent.requestPermission()}catch(e){}}
 
-function startGPS(){
-  askOrientation();
+const IOS=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+// Panduan bila izin lokasi ditolak. Di iOS sumbernya hampir selalu pengaturan sistem atau pengaturan situs Safari.
+function gpsHelp(kind){
+  const steps=kind==='insecure'?['Buka game lewat alamat <b>https://</b> (misalnya link Vercel), bukan file atau http.']
+   :IOS?['Buka <b>Pengaturan</b> iPhone → <b>Privasi &amp; Keamanan</b> → <b>Layanan Lokasi</b>: pastikan <b>Nyala</b>.',
+     'Di daftar yang sama, ketuk <b>Situs Web Safari</b> → pilih <b>Saat Menggunakan App</b>, dan nyalakan <b>Lokasi Persis</b>.',
+     `Kembali ke Safari, ketuk <b>aA</b> di bilah alamat → <b>Pengaturan Situs Web</b> → <b>Lokasi</b> → <b>Tanya</b> atau <b>Izinkan</b>.`,
+     'Muat ulang halaman, lalu ketuk <b>Coba GPS lagi</b> dan pilih <b>Izinkan</b>.']
+   :['Ketuk ikon gembok di bilah alamat → <b>Izin</b> / <b>Setelan situs</b> → <b>Lokasi</b> → <b>Izinkan</b>.',
+     'Pastikan lokasi (GPS) HP menyala dari panel notifikasi.',
+     'Muat ulang halaman, lalu ketuk <b>Coba GPS lagi</b>.'];
+  $('#gpsHelpTitle').textContent=kind==='insecure'?'GPS butuh HTTPS':'Izin lokasi diblokir';
+  $('#gpsHelpSteps').innerHTML=steps.map(x=>`<li>${x}</li>`).join('');
+  $('#homeStatus').textContent='';$('#gpsHelp').hidden=false;$('#gpsHelp').scrollIntoView({behavior:'smooth',block:'center'});
+}
+async function startGPS(){
+  // Jangan minta izin kompas di sini: Safari iOS hanya menampilkan satu dialog izin, dan permintaan lokasi
+  // yang datang bersamaan bisa langsung dianggap ditolak. Kompas diminta saat pemain mengetuk peta / membuka AR.
+  $('#gpsHelp').hidden=true;
+  if(!window.isSecureContext)return gpsHelp('insecure');
   if(!('geolocation' in navigator))return fallback('Perangkat tidak mendukung GPS.');
+  try{const st=await navigator.permissions?.query({name:'geolocation'});if(st?.state==='denied')return gpsHelp('denied')}catch(e){}
   $('#homeStatus').textContent='Mencari sinyal GPS…';
   let got=false;
-  const to=setTimeout(()=>{if(!got){stopGeo();fallback('Sinyal GPS tidak didapat.')}},12000);
+  const to=setTimeout(()=>{if(!got){stopGeo();fallback('Sinyal GPS tidak didapat.')}},25000);
   try{
     S.geoId=navigator.geolocation.watchPosition(p=>{
       const c=p.coords;
       if(!got){got=true;clearTimeout(to);S.origin={lat:c.latitude,lon:c.longitude};S.lastOrigin={...S.origin};save();S.pos={x:0,y:0};enterPlay('gps')}
       S.pos=toXY(c.latitude,c.longitude);S.acc=c.accuracy;
-    },e=>{if(!got){got=true;clearTimeout(to);stopGeo();fallback(e.code===1?'Izin lokasi ditolak.':'GPS tidak tersedia di sini.')}},
+    },e=>{if(!got){got=true;clearTimeout(to);stopGeo();if(e.code===1)gpsHelp('denied');else fallback('GPS tidak tersedia di sini.')}},
     {enableHighAccuracy:true,maximumAge:2000,timeout:15000});
   }catch(e){got=true;clearTimeout(to);fallback('GPS tidak tersedia di sini.')}
 }
@@ -622,7 +649,9 @@ function renderMap(t){
 }
 let downAt=null;
 mapC.addEventListener('pointerdown',e=>{downAt=[e.clientX,e.clientY]});
+let oriAsked=false;
 mapC.addEventListener('pointerup',e=>{
+  if(!oriAsked){oriAsked=true;askOrientation()}
   if(!downAt||!mapGeom)return;const moved=Math.hypot(e.clientX-downAt[0],e.clientY-downAt[1]);downAt=null;if(moved>12)return;
   const r=mapC.getBoundingClientRect(),px=e.clientX-r.left,py=e.clientY-r.top,{sx,sy,sc,W,H}=mapGeom;
   let hit=null,best=30;for(const sp of S.spawns){const d=Math.hypot(sx(sp.x)-px,sy(sp.y)-py);if(d<best){best=d;hit=sp}}
@@ -818,7 +847,9 @@ function renderHero(t){
   if(avC.isConnected&&screen==='home'){const [c2,w2,h2]=sizeCanvas(avC);c2.clearRect(0,0,w2,h2);drawPlayer(c2,w2/2,h2-10,h2*.72,S.av,t,null,1)}
 }
 $('#bGps').onclick=startGPS;
-$('#bSim').onclick=()=>{askOrientation();enterPlay('sim');if(!S.lastOrigin)simLocate()};
+$('#bSim').onclick=()=>{enterPlay('sim');if(!S.lastOrigin)simLocate()};
+$('#bGpsRetry').onclick=startGPS;
+$('#bGpsSim').onclick=()=>{$('#gpsHelp').hidden=true;enterPlay('sim')};
 
 /* ---------- Loop ---------- */
 let prev=performance.now(),hudT=0;
