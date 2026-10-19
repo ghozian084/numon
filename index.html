@@ -524,7 +524,7 @@ function gpsHelp(kind,err){
   $('#gpsHelpTitle').textContent=kind==='insecure'?'GPS butuh HTTPS':'Izin lokasi diblokir';
   $('#gpsHelpSteps').innerHTML=steps.map(x=>`<li>${x}</li>`).join('');
   let ps='?';try{ps=window.__geoPerm||'?'}catch(e){}
-  $('#gpsDiag').textContent=[`jenis: ${kind}`,err?`kode: ${err.code} · pesan: ${err.message||'-'}`:'',`izin (Permissions API): ${ps}`,`HTTPS/secure: ${window.isSecureContext}`,`di dalam iframe: ${window.top!==window.self}`,`alamat: ${location.origin}`,`browser: ${navigator.userAgent}`].filter(Boolean).join('\n');
+  $('#gpsDiag').textContent=[`jenis: ${kind}`,`waktu: ${new Date().toLocaleString('id-ID')}`,err?`kode: ${err.code} · pesan: ${err.message||'-'}`:'',`izin (Permissions API): ${ps}`,`HTTPS/secure: ${window.isSecureContext}`,`di dalam iframe: ${window.top!==window.self}`,`alamat: ${location.origin}`,`browser: ${navigator.userAgent}`].filter(Boolean).join('\n');
   $('#homeStatus').textContent='';$('#gpsHelp').hidden=false;$('#gpsHelp').scrollIntoView({behavior:'smooth',block:'center'});
 }
 async function startGPS(){
@@ -533,7 +533,8 @@ async function startGPS(){
   $('#gpsHelp').hidden=true;
   if(!window.isSecureContext)return gpsHelp('insecure');
   if(!('geolocation' in navigator))return fallback('Perangkat tidak mendukung GPS.');
-  try{const st=await navigator.permissions?.query({name:'geolocation'});window.__geoPerm=st?.state;if(st?.state==='denied')return gpsHelp('denied')}catch(e){}
+  // Status dari Permissions API hanya dicatat untuk diagnosis: Safari bisa melaporkan "denied" yang sudah usang.
+  try{const st=await navigator.permissions?.query({name:'geolocation'});window.__geoPerm=st?.state}catch(e){}
   $('#homeStatus').textContent='Mencari sinyal GPS…';
   let got=false;
   const to=setTimeout(()=>{if(!got){stopGeo();fallback('Sinyal GPS tidak didapat.')}},25000);
@@ -855,7 +856,9 @@ function renderHero(t){
 }
 $('#bGps').onclick=startGPS;
 $('#bSim').onclick=()=>{enterPlay('sim');if(!S.lastOrigin)simLocate()};
-$('#bGpsRetry').onclick=startGPS;
+// Safari mengingat penolakan lokasi selama halaman masih terbuka, jadi "coba lagi" harus memuat ulang halaman.
+$('#bGpsRetry').onclick=()=>{try{sessionStorage.setItem('numon.retryGps','1')}catch(e){}location.reload()};
+try{if(sessionStorage.getItem('numon.retryGps')){sessionStorage.removeItem('numon.retryGps');startGPS()}}catch(e){}
 $('#bGpsSim').onclick=()=>{$('#gpsHelp').hidden=true;enterPlay('sim')};
 
 /* ---------- Loop ---------- */
