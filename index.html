@@ -61,6 +61,8 @@ button{font:inherit;color:inherit;cursor:pointer}
 @media (max-width:340px){.avatar{grid-template-columns:1fr}.avatar canvas{justify-self:center}}
 .note.gpsHelp{display:grid;gap:8px;box-shadow:inset 0 0 0 2px var(--bad);color:var(--ink)}
 .gpsHelp b{font-size:15px}
+.gpsHelp summary{font-weight:700;cursor:pointer}
+.diag{white-space:pre-wrap;word-break:break-word;font-family:var(--mono);font-size:11px;margin:6px 0 0;background:var(--ground);padding:8px;border-radius:8px}
 .gpsHelp ol{margin:0;padding-left:20px;display:grid;gap:4px}
 .note{font-size:13px;color:var(--ink-soft);background:var(--paper);border-radius:12px;padding:12px 14px;margin:0;box-shadow:inset 0 0 0 1px var(--line)}
 
@@ -192,6 +194,7 @@ sup,sub{line-height:0}
       <div class="note gpsHelp" id="gpsHelp" hidden>
         <b id="gpsHelpTitle">Izin lokasi diblokir</b>
         <ol id="gpsHelpSteps"></ol>
+        <details><summary>Info teknis (kirim ke guru/pengembang bila masih gagal)</summary><pre class="diag" id="gpsDiag"></pre></details>
         <div class="row"><button class="btn primary slim" id="bGpsRetry">Coba GPS lagi</button><button class="btn ghost slim" id="bGpsSim">Main simulasi dulu</button></div>
       </div>
       <p class="note">GPS dan kamera hanya jalan bila halaman dibuka lewat HTTPS di HP. Kalau GPS gagal, kamu bisa tetap main di mode simulasi.</p>
@@ -507,17 +510,21 @@ async function askOrientation(){try{if(typeof DeviceOrientationEvent!=='undefine
 
 const IOS=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 // Panduan bila izin lokasi ditolak. Di iOS sumbernya hampir selalu pengaturan sistem atau pengaturan situs Safari.
-function gpsHelp(kind){
+function gpsHelp(kind,err){
   const steps=kind==='insecure'?['Buka game lewat alamat <b>https://</b> (misalnya link Vercel), bukan file atau http.']
    :IOS?['Buka <b>Pengaturan</b> iPhone → <b>Privasi &amp; Keamanan</b> → <b>Layanan Lokasi</b>: pastikan <b>Nyala</b>.',
+     'Buka <b>Pengaturan</b> → <b>Apps</b> → <b>Safari</b> (iOS lama: langsung <b>Safari</b>) → gulir ke <b>Pengaturan untuk Situs Web</b> → <b>Lokasi</b> → pilih <b>Tanya</b>. Kalau di sini <b>Tolak</b>, semua situs ditolak tanpa dialog.',
+     'Kalau memakai <b>Durasi Layar</b>: <b>Batasan Konten &amp; Privasi</b> → <b>Layanan Lokasi</b> harus <b>Izinkan Perubahan</b>.',
      'Di daftar yang sama, ketuk <b>Situs Web Safari</b> → pilih <b>Saat Menggunakan App</b>, dan nyalakan <b>Lokasi Persis</b>.',
      `Kembali ke Safari, ketuk <b>aA</b> di bilah alamat → <b>Pengaturan Situs Web</b> → <b>Lokasi</b> → <b>Tanya</b> atau <b>Izinkan</b>.`,
-     'Muat ulang halaman, lalu ketuk <b>Coba GPS lagi</b> dan pilih <b>Izinkan</b>.']
+     'Tutup tab ini, buka tab baru di <b>Safari</b> (bukan dari dalam WhatsApp/Instagram), buka lagi link game, ketuk <b>Mulai dengan GPS</b> dan pilih <b>Izinkan</b>.']
    :['Ketuk ikon gembok di bilah alamat → <b>Izin</b> / <b>Setelan situs</b> → <b>Lokasi</b> → <b>Izinkan</b>.',
      'Pastikan lokasi (GPS) HP menyala dari panel notifikasi.',
      'Muat ulang halaman, lalu ketuk <b>Coba GPS lagi</b>.'];
   $('#gpsHelpTitle').textContent=kind==='insecure'?'GPS butuh HTTPS':'Izin lokasi diblokir';
   $('#gpsHelpSteps').innerHTML=steps.map(x=>`<li>${x}</li>`).join('');
+  let ps='?';try{ps=window.__geoPerm||'?'}catch(e){}
+  $('#gpsDiag').textContent=[`jenis: ${kind}`,err?`kode: ${err.code} · pesan: ${err.message||'-'}`:'',`izin (Permissions API): ${ps}`,`HTTPS/secure: ${window.isSecureContext}`,`di dalam iframe: ${window.top!==window.self}`,`alamat: ${location.origin}`,`browser: ${navigator.userAgent}`].filter(Boolean).join('\n');
   $('#homeStatus').textContent='';$('#gpsHelp').hidden=false;$('#gpsHelp').scrollIntoView({behavior:'smooth',block:'center'});
 }
 async function startGPS(){
@@ -526,7 +533,7 @@ async function startGPS(){
   $('#gpsHelp').hidden=true;
   if(!window.isSecureContext)return gpsHelp('insecure');
   if(!('geolocation' in navigator))return fallback('Perangkat tidak mendukung GPS.');
-  try{const st=await navigator.permissions?.query({name:'geolocation'});if(st?.state==='denied')return gpsHelp('denied')}catch(e){}
+  try{const st=await navigator.permissions?.query({name:'geolocation'});window.__geoPerm=st?.state;if(st?.state==='denied')return gpsHelp('denied')}catch(e){}
   $('#homeStatus').textContent='Mencari sinyal GPS…';
   let got=false;
   const to=setTimeout(()=>{if(!got){stopGeo();fallback('Sinyal GPS tidak didapat.')}},25000);
@@ -535,7 +542,7 @@ async function startGPS(){
       const c=p.coords;
       if(!got){got=true;clearTimeout(to);S.origin={lat:c.latitude,lon:c.longitude};S.lastOrigin={...S.origin};save();S.pos={x:0,y:0};enterPlay('gps')}
       S.pos=toXY(c.latitude,c.longitude);S.acc=c.accuracy;
-    },e=>{if(!got){got=true;clearTimeout(to);stopGeo();if(e.code===1)gpsHelp('denied');else fallback('GPS tidak tersedia di sini.')}},
+    },e=>{if(!got){got=true;clearTimeout(to);stopGeo();if(e.code===1)gpsHelp('denied',e);else fallback('GPS tidak tersedia di sini.')}},
     {enableHighAccuracy:true,maximumAge:2000,timeout:15000});
   }catch(e){got=true;clearTimeout(to);fallback('GPS tidak tersedia di sini.')}
 }
